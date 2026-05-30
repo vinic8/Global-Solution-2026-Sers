@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ÓRION-7 // Controle de Missão — Monitoramento Energético</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PAINEL DE CONTROLE — MISSÃO ÓRION-7
+   Sistema inteligente de monitoramento energético
+   Tema: Controle de missão / HUD aeroespacial
+   ============================================================ */
+
+:root{
+  --void:        #04060d;
+  --void-2:      #070b16;
+  --panel:       rgba(11, 19, 35, 0.72);
+  --panel-solid: #0a1122;
+  --line:        rgba(99, 179, 219, 0.16);
+  --line-strong: rgba(99, 179, 219, 0.34);
+
+  --cyan:    #45e0ff;
+  --cyan-dim:#1d7fa3;
+  --green:   #36e0a0;   /* NOMINAL  */
+  --amber:   #ffc24b;   /* ATENÇÃO  */
+  --red:     #ff5d73;   /* CRÍTICO  */
+  --violet:  #8b7dff;
+
+  --txt:     #dCeaf4;
+  --txt-2:   #8ba3bb;
+  --txt-3:   #51697f;
+
+  --glow-cyan:  0 0 22px rgba(69,224,255,.35);
+  --r: 4px;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+html,body{ height:100%; }
+
+body{
+  font-family:'Chakra Petch', sans-serif;
+  background:
+    radial-gradient(1200px 700px at 78% -10%, rgba(60,90,160,.18), transparent 60%),
+    radial-gradient(900px 600px at 8% 110%, rgba(120,80,200,.12), transparent 55%),
+    linear-gradient(180deg, var(--void) 0%, var(--void-2) 100%);
+  background-attachment: fixed;
+  color:var(--txt);
+  min-height:100vh;
+  overflow-x:hidden;
+  letter-spacing:.2px;
+}
+
+/* campo de estrelas + grade + scanlines de fundo */
+#starfield{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+body::before{ /* grade técnica sutil */
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+  background-image:
+    linear-gradient(rgba(99,179,219,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99,179,219,.045) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(circle at 50% 35%, #000 30%, transparent 90%);
+}
+body::after{ /* scanlines */
+  content:""; position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.35;
+  background: repeating-linear-gradient(180deg, transparent 0 2px, rgba(0,0,0,.16) 2px 3px);
+}
+
+.shell{ position:relative; z-index:2; max-width:1480px; margin:0 auto; padding:18px 22px 40px; }
+
+/* ---------- mono / utilitários ---------- */
+.mono{ font-family:'IBM Plex Mono', monospace; }
+.tnum{ font-family:'IBM Plex Mono', monospace; font-variant-numeric:tabular-nums; }
+.up{ text-transform:uppercase; letter-spacing:1.4px; }
+
+/* ---------- painel com cantos HUD ---------- */
+.panel{
+  position:relative;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.panel::before,.panel::after{
+  content:""; position:absolute; width:11px; height:11px; pointer-events:none;
+  border-color:var(--line-strong); border-style:solid;
+}
+.panel::before{ top:-1px; left:-1px; border-width:1px 0 0 1px; }
+.panel::after{ bottom:-1px; right:-1px; border-width:0 1px 1px 0; }
+.panel .corner-tr,.panel .corner-bl{ position:absolute; width:11px; height:11px; pointer-events:none; border-color:var(--line-strong); border-style:solid; }
+.panel .corner-tr{ top:-1px; right:-1px; border-width:1px 1px 0 0; }
+.panel .corner-bl{ bottom:-1px; left:-1px; border-width:0 0 1px 1px; }
+
+.p-head{
+  display:flex; align-items:center; gap:9px;
+  padding:11px 15px; border-bottom:1px solid var(--line);
+}
+.p-head h2{ font-size:12.5px; font-weight:600; color:var(--txt); letter-spacing:1.6px; text-transform:uppercase; }
+.p-head .idx{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-3); margin-left:auto; letter-spacing:1px; }
+.p-head .tick{ width:6px; height:6px; border-radius:50%; background:var(--cyan); box-shadow:var(--glow-cyan); animation:blink 2.4s infinite; }
+@keyframes blink{ 0%,100%{opacity:1} 50%{opacity:.25} }
+.p-body{ padding:15px; }
+
+/* ============================================================
+   CABEÇALHO
+   ============================================================ */
+header.topbar{
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+  padding:14px 20px; margin-bottom:16px;
+  background:linear-gradient(180deg, rgba(13,22,42,.85), rgba(8,14,28,.7));
+  border:1px solid var(--line); border-radius:var(--r);
+  position:relative; overflow:hidden;
+}
+header.topbar::after{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+  background:linear-gradient(90deg, transparent, var(--cyan), transparent); opacity:.55;
+}
+.brand{ display:flex; align-items:center; gap:13px; }
+.logo{
+  width:42px; height:42px; flex:none; position:relative; display:grid; place-items:center;
+}
+.logo svg{ width:42px; height:42px; filter:drop-shadow(0 0 6px rgba(69,224,255,.5)); }
+.logo .ring{ transform-origin:center; animation:spin 14s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg) } }
+.brand .title{ font-size:19px; font-weight:700; letter-spacing:2px; line-height:1; }
+.brand .title b{ color:var(--cyan); }
+.brand .sub{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-3); letter-spacing:2px; margin-top:4px; }
+
+.clocks{ display:flex; gap:26px; margin-left:auto; flex-wrap:wrap; }
+.clock{ text-align:right; }
+.clock .lbl{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--txt-3); letter-spacing:2px; }
+.clock .val{ font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:600; color:var(--txt); letter-spacing:1px; }
+
+.statuspill{
+  display:flex; align-items:center; gap:10px;
+  padding:9px 16px; border-radius:var(--r);
+  border:1px solid currentColor; background:rgba(54,224,160,.08);
+}
+.statuspill .dot{ width:9px; height:9px; border-radius:50%; background:currentColor; box-shadow:0 0 12px currentColor; animation:blink 1.8s infinite; }
+.statuspill .txt{ display:flex; flex-direction:column; line-height:1.15; }
+.statuspill .txt small{ font-family:'IBM Plex Mono',monospace; font-size:8.5px; color:var(--txt-3); letter-spacing:1.5px; }
+.statuspill .txt b{ font-size:14px; letter-spacing:2px; color:currentColor; }
+.statuspill.ok{ color:var(--green); } .statuspill.warn{ color:var(--amber); } .statuspill.crit{ color:var(--red); }
+
+/* ============================================================
+   GRID PRINCIPAL
+   ============================================================ */
+.kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
+.kpi{ padding:15px 16px 13px; }
+.kpi .top{ display:flex; align-items:center; justify-content:space-between; }
+.kpi .name{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-2); letter-spacing:1.5px; text-transform:uppercase; }
+.kpi .ico{ width:26px; height:26px; opacity:.85; }
+.kpi .ico svg{ width:26px; height:26px; }
+.kpi .v{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:34px; line-height:1.05; margin-top:10px; color:var(--txt); }
+.kpi .v .u{ font-size:14px; color:var(--txt-2); margin-left:4px; font-weight:500; }
+.kpi .spark{ width:100%; height:30px; margin-top:8px; display:block; }
+.kpi .foot{ display:flex; align-items:center; gap:6px; margin-top:6px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-3); }
+.kpi .trend{ font-weight:600; }
+.kpi .trend.up{ color:var(--green); } .kpi .trend.down{ color:var(--red); }
+
+.main{ display:grid; grid-template-columns: 1.62fr 1fr; gap:16px; align-items:start; }
+.col{ display:flex; flex-direction:column; gap:16px; }
+
+/* gráfico de energia */
+#chart{ width:100%; height:240px; display:block; }
+.legend{ display:flex; gap:18px; padding:0 15px 13px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--txt-2); }
+.legend span{ display:flex; align-items:center; gap:7px; }
+.legend i{ width:14px; height:3px; border-radius:2px; display:inline-block; }
+
+/* status dos módulos */
+.modgrid{ display:grid; grid-template-columns:repeat(2,1fr); gap:11px; }
+.mod{
+  position:relative; padding:12px 13px; border:1px solid var(--line); border-radius:var(--r);
+  background:rgba(8,14,28,.5); border-left:3px solid var(--txt-3); transition:.25s;
+}
+.mod.ok{ border-left-color:var(--green); } .mod.warn{ border-left-color:var(--amber); } .mod.crit{ border-left-color:var(--red); animation:critpulse 1.6s infinite; }
+@keyframes critpulse{ 0%,100%{ background:rgba(8,14,28,.5) } 50%{ background:rgba(255,93,115,.07) } }
+.mod .r1{ display:flex; align-items:center; gap:8px; }
+.mod .r1 .mname{ font-size:12.5px; font-weight:600; letter-spacing:.5px; }
+.mod .st{ margin-left:auto; display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:1.2px; text-transform:uppercase; }
+.mod .st .d{ width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
+.mod.ok .st{ color:var(--green); } .mod.warn .st{ color:var(--amber); } .mod.crit .st{ color:var(--red); }
+.mod .metrics{ display:flex; gap:16px; margin-top:11px; }
+.mod .metrics .m{ flex:1; }
+.mod .metrics .m .lab{ font-family:'IBM Plex Mono',monospace; font-size:8.5px; color:var(--txt-3); letter-spacing:1px; text-transform:uppercase; }
+.mod .metrics .m .num{ font-family:'IBM Plex Mono',monospace; font-size:16px; font-weight:600; color:var(--txt); margin-top:2px; }
+.mod .bar{ height:4px; border-radius:3px; background:rgba(99,179,219,.12); margin-top:10px; overflow:hidden; }
+.mod .bar i{ display:block; height:100%; border-radius:3px; background:linear-gradient(90deg,var(--cyan-dim),var(--cyan)); transition:width .6s; }
+.mod.ok .bar i{ background:linear-gradient(90deg,#1c8a64,var(--green)); }
+.mod.warn .bar i{ background:linear-gradient(90deg,#b5852a,var(--amber)); }
+.mod.crit .bar i{ background:linear-gradient(90deg,#a83545,var(--red)); }
+
+/* sustentabilidade — anel */
+.ring-wrap{ display:flex; align-items:center; gap:18px; }
+.ring{ position:relative; width:132px; height:132px; flex:none; }
+.ring svg{ transform:rotate(-90deg); }
+.ring .ctr{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ring .ctr .big{ font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:600; line-height:1; }
+.ring .ctr .lab{ font-family:'IBM Plex Mono',monospace; font-size:8px; color:var(--txt-3); letter-spacing:1.5px; margin-top:3px; }
+.ring-info{ flex:1; }
+.ring-info .li{ display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px dashed var(--line); font-family:'IBM Plex Mono',monospace; font-size:11px; }
+.ring-info .li:last-child{ border-bottom:0; }
+.ring-info .li span{ color:var(--txt-2); }
+.ring-info .li b{ color:var(--txt); }
+
+/* fontes de energia (barra empilhada) */
+.srcbar{ height:18px; border-radius:3px; overflow:hidden; display:flex; border:1px solid var(--line); margin-top:4px; }
+.srcbar .seg{ height:100%; transition:width .6s; }
+.srcbar .solar{ background:linear-gradient(90deg,#1c8a64,var(--green)); }
+.srcbar .batt{ background:linear-gradient(90deg,var(--cyan-dim),var(--cyan)); }
+.srckey{ display:flex; gap:18px; margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-2); }
+.srckey span{ display:flex; align-items:center; gap:6px; }
+.srckey i{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+
+/* vitais (comunicação + temperatura) */
+.vital{ margin-bottom:16px; }
+.vital:last-child{ margin-bottom:0; }
+.vital .vh{ display:flex; justify-content:space-between; align-items:center; margin-bottom:9px; }
+.vital .vh .lab{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-2); letter-spacing:1.2px; text-transform:uppercase; }
+.vital .vh .read{ font-family:'IBM Plex Mono',monospace; font-size:16px; font-weight:600; }
+.signal{ display:flex; align-items:flex-end; gap:4px; height:30px; }
+.signal i{ flex:1; border-radius:2px; background:rgba(99,179,219,.14); transition:.3s; }
+.signal i.on{ background:linear-gradient(180deg,var(--cyan),var(--cyan-dim)); box-shadow:0 0 8px rgba(69,224,255,.4); }
+.thermo{ height:14px; border-radius:8px; background:linear-gradient(90deg,#2563b0,#36e0a0 45%,#ffc24b 72%,#ff5d73); position:relative; }
+.thermo .marker{ position:absolute; top:-4px; width:4px; height:22px; background:#fff; border-radius:2px; box-shadow:0 0 8px rgba(255,255,255,.7); transform:translateX(-50%); transition:left .6s; }
+.thermo-scale{ display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:8.5px; color:var(--txt-3); margin-top:5px; }
+
+/* ============================================================
+   FEEDS (alertas + decisões)
+   ============================================================ */
+.feeds{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+.feed{ max-height:330px; display:flex; flex-direction:column; }
+.feed .list{ overflow-y:auto; padding:8px 8px 10px; flex:1; }
+.feed .list::-webkit-scrollbar{ width:7px; }
+.feed .list::-webkit-scrollbar-thumb{ background:var(--line-strong); border-radius:4px; }
+
+.alert{
+  display:flex; gap:11px; padding:10px 11px; margin:6px 5px; border-radius:var(--r);
+  background:rgba(8,14,28,.6); border:1px solid var(--line); border-left:3px solid var(--txt-3);
+  animation:slidein .4s ease;
+}
+@keyframes slidein{ from{ opacity:0; transform:translateX(-12px) } to{ opacity:1; transform:none } }
+.alert.crit{ border-left-color:var(--red); background:rgba(255,93,115,.07); }
+.alert.warn{ border-left-color:var(--amber); }
+.alert.info{ border-left-color:var(--cyan); }
+.alert.good{ border-left-color:var(--green); }
+.alert .ai{ font-family:'IBM Plex Mono',monospace; font-size:15px; line-height:1; margin-top:2px; }
+.alert.crit .ai{ color:var(--red); } .alert.warn .ai{ color:var(--amber); } .alert.info .ai{ color:var(--cyan); } .alert.good .ai{ color:var(--green); }
+.alert .body{ flex:1; min-width:0; }
+.alert .body .ttl{ font-size:12.5px; font-weight:600; line-height:1.3; }
+.alert .body .meta{ display:flex; gap:9px; margin-top:5px; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--txt-3); letter-spacing:.6px; }
+.alert .body .meta .tag{ padding:1px 6px; border:1px solid var(--line-strong); border-radius:3px; }
+
+.decision .ai{ color:var(--violet)!important; }
+.decision{ border-left-color:var(--violet)!important; }
+
+/* [v3] feed congelado enquanto o mouse está sobre ele */
+.feed{ transition:box-shadow .2s, border-color .2s; }
+.feed.paused{ border-color:rgba(255,194,75,.45); box-shadow:0 0 0 1px rgba(255,194,75,.18), inset 0 0 32px rgba(255,194,75,.04); }
+.feed-pause{ display:none; align-items:center; margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:8.5px; letter-spacing:1.2px; color:var(--amber); border:1px solid var(--amber); background:rgba(255,194,75,.1); padding:2px 8px; border-radius:20px; }
+.feed.paused .feed-pause{ display:inline-flex; }
+.feed.paused .p-head .idx{ display:none; }   /* dá lugar ao aviso de pausa */
+
+/* rodapé */
+footer{ margin-top:22px; padding:16px 4px; border-top:1px solid var(--line); display:flex; flex-wrap:wrap; align-items:center; gap:14px; }
+footer .tags{ display:flex; gap:9px; flex-wrap:wrap; }
+footer .tag{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:1px; color:var(--cyan); padding:4px 10px; border:1px solid var(--line-strong); border-radius:20px; text-transform:uppercase; }
+footer .meta{ margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--txt-3); letter-spacing:1px; }
+
+/* ===================== CONSOLE DO OPERADOR (v2) ===================== */
+.console{ margin-top:16px; }
+.con-mode{ margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:1.4px; padding:4px 11px; border-radius:20px; border:1px solid var(--line-strong); color:var(--txt-3); white-space:nowrap; }
+.con-mode.on{ color:var(--amber); border-color:var(--amber); background:rgba(255,194,75,.1); animation:blink 1.6s infinite; }
+.con-help{ font-size:12.5px; color:var(--txt-2); line-height:1.55; margin-bottom:16px; }
+.con-help b{ color:var(--txt); }
+.con-grid{ display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:18px; }
+.con-group h3{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--cyan); letter-spacing:1px; text-transform:uppercase; margin-bottom:13px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+.con-group h3 small{ color:var(--txt-3); font-weight:400; letter-spacing:.4px; text-transform:none; font-size:9.5px; }
+
+.sl-row{ margin-bottom:15px; }
+.sl-row:last-child{ margin-bottom:0; }
+.sl-top{ display:flex; align-items:center; gap:8px; }
+.sl-lab{ font-size:11.5px; color:var(--txt); }
+.sl-val{ margin-left:auto; font-size:12px; font-weight:600; color:var(--cyan); }
+.sl-row.manual .sl-val{ color:var(--amber); }
+.sl-auto{ font-family:'IBM Plex Mono',monospace; font-size:8.5px; letter-spacing:1px; padding:3px 7px; border-radius:3px; cursor:pointer; background:transparent; color:var(--txt-3); border:1px solid var(--line-strong); transition:.15s; }
+.sl-auto:hover{ color:var(--cyan); border-color:var(--cyan); }
+.sl-row.manual .sl-auto{ color:var(--amber); border-color:var(--amber); }
+.sl-row input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:4px; background:rgba(99,179,219,.18); outline:none; margin-top:9px; cursor:pointer; }
+.sl-row input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px rgba(69,224,255,.6); border:2px solid #0a1122; cursor:pointer; }
+.sl-row input[type=range]::-moz-range-thumb{ width:16px; height:16px; border-radius:50%; background:var(--cyan); border:2px solid #0a1122; box-shadow:0 0 8px rgba(69,224,255,.6); cursor:pointer; }
+.sl-row.manual input[type=range]{ background:rgba(255,194,75,.25); }
+.sl-row.manual input[type=range]::-webkit-slider-thumb{ background:var(--amber); box-shadow:0 0 10px rgba(255,194,75,.7); }
+.sl-row.manual input[type=range]::-moz-range-thumb{ background:var(--amber); box-shadow:0 0 10px rgba(255,194,75,.7); }
+
+.btn-wrap{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.cbtn{ font-family:'Chakra Petch',sans-serif; font-size:11.5px; letter-spacing:.3px; padding:10px 11px; border-radius:var(--r); cursor:pointer; background:rgba(8,14,28,.55); color:var(--txt); border:1px solid var(--line-strong); transition:.16s; text-align:left; }
+.cbtn:hover{ transform:translateY(-1px); }
+.cbtn:active{ transform:translateY(0) scale(.985); }
+.cbtn.warn:hover{ border-color:var(--amber); color:var(--amber); box-shadow:0 0 14px rgba(255,194,75,.22); }
+.cbtn.crit:hover{ border-color:var(--red); color:var(--red); box-shadow:0 0 14px rgba(255,93,115,.26); }
+.cbtn.mod:hover{ border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 14px rgba(69,224,255,.22); }
+
+.con-actions{ display:flex; align-items:center; gap:18px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line); flex-wrap:wrap; }
+.cbtn.reset{ border-color:var(--green); color:var(--green); font-size:12.5px; padding:10px 16px; }
+.cbtn.reset:hover{ background:rgba(54,224,160,.12); box-shadow:0 0 16px rgba(54,224,160,.3); }
+.con-toggle{ display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--txt-2); cursor:pointer; letter-spacing:.5px; }
+.con-toggle input{ accent-color:var(--cyan); width:15px; height:15px; cursor:pointer; }
+
+@media (max-width:1080px){ .con-grid{ grid-template-columns:1fr; } }
+@media (max-width:520px){ .btn-wrap{ grid-template-columns:1fr; } }
+
+/* responsivo */
+@media (max-width:1080px){
+  .main{ grid-template-columns:1fr; }
+  .kpis{ grid-template-columns:repeat(2,1fr); }
+}
+@media (max-width:620px){
+  .kpis{ grid-template-columns:1fr; }
+  .modgrid{ grid-template-columns:1fr; }
+  .feeds{ grid-template-columns:1fr; }
+  .clocks{ width:100%; justify-content:space-between; margin-left:0; }
+  .statuspill{ width:100%; justify-content:center; }
+  .brand .title{ font-size:16px; }
+}
+</style>
+</head>
+<body>
+<canvas id="starfield"></canvas>
+
+<div class="shell">
+
+  <!-- ============== CABEÇALHO ============== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 48 48" fill="none">
+          <circle class="ring" cx="24" cy="24" r="19" stroke="#45e0ff" stroke-width="1.3" stroke-dasharray="6 7" opacity=".8"/>
+          <circle cx="24" cy="24" r="12" stroke="#8ba3bb" stroke-width="1" opacity=".5"/>
+          <circle cx="24" cy="24" r="3.6" fill="#45e0ff"/>
+          <path d="M24 5 L24 12 M24 36 L24 43 M5 24 L12 24 M36 24 L43 24" stroke="#45e0ff" stroke-width="1.3"/>
+        </svg>
+      </div>
+      <div>
+        <div class="title"><b>ÓRION</b>-7 · CONTROLE DE MISSÃO</div>
+        <div class="sub">SISTEMA INTELIGENTE DE MONITORAMENTO ENERGÉTICO</div>
+      </div>
+    </div>
+
+    <div class="clocks">
+      <div class="clock">
+        <div class="lbl">TEMPO DE MISSÃO (MET)</div>
+        <div class="val tnum" id="met">T+00:00:00:00</div>
+      </div>
+      <div class="clock">
+        <div class="lbl">HORÁRIO · UTC</div>
+        <div class="val tnum" id="utc">--:--:--</div>
+      </div>
+    </div>
+
+    <div class="statuspill ok" id="statuspill">
+      <div class="dot"></div>
+      <div class="txt"><small>STATUS GLOBAL</small><b id="globalstatus">NOMINAL</b></div>
+    </div>
+  </header>
+
+  <!-- ============== KPIs ============== -->
+  <section class="kpis">
+    <div class="panel kpi"><span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="top">
+        <span class="name">Geração (Renovável)</span>
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#36e0a0" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></span>
+      </div>
+      <div class="v tnum"><span id="kpi-gen">0.0</span><span class="u">kW</span></div>
+      <canvas class="spark" id="spark-gen"></canvas>
+      <div class="foot"><span class="trend" id="trend-gen">—</span><span>painéis solares</span></div>
+    </div>
+
+    <div class="panel kpi"><span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="top">
+        <span class="name">Consumo Total</span>
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#ffc24b" stroke-width="1.5"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span>
+      </div>
+      <div class="v tnum"><span id="kpi-con">0.0</span><span class="u">kW</span></div>
+      <canvas class="spark" id="spark-con"></canvas>
+      <div class="foot"><span class="trend" id="trend-con">—</span><span>todos os módulos</span></div>
+    </div>
+
+    <div class="panel kpi"><span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="top">
+        <span class="name">Banco de Baterias</span>
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#45e0ff" stroke-width="1.5"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 10v4"/><rect x="4" y="9" width="9" height="6" fill="#45e0ff" stroke="none"/></svg></span>
+      </div>
+      <div class="v tnum"><span id="kpi-bat">0</span><span class="u">%</span></div>
+      <canvas class="spark" id="spark-bat"></canvas>
+      <div class="foot"><span class="trend" id="trend-bat">—</span><span id="bat-flow">em espera</span></div>
+    </div>
+
+    <div class="panel kpi"><span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="top">
+        <span class="name">Sustentabilidade</span>
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#8b7dff" stroke-width="1.5"><path d="M12 3c-4 4-6 7-6 11a6 6 0 0012 0c0-4-2-7-6-11z"/><path d="M12 21V11"/></svg></span>
+      </div>
+      <div class="v tnum"><span id="kpi-sus">0</span><span class="u">/100</span></div>
+      <canvas class="spark" id="spark-sus"></canvas>
+      <div class="foot"><span class="trend" id="trend-sus">—</span><span>índice global</span></div>
+    </div>
+  </section>
+
+  <!-- ============== ÁREA PRINCIPAL ============== -->
+  <div class="main">
+
+    <!-- coluna esquerda -->
+    <div class="col">
+
+      <!-- gráfico de balanço energético -->
+      <div class="panel"><span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="p-head"><div class="tick"></div><h2>Balanço de Potência · Tempo Real</h2><span class="idx">FIG-01 · kW × t</span></div>
+        <canvas id="chart"></canvas>
+        <div class="legend">
+          <span><i style="background:#36e0a0"></i> Geração solar</span>
+          <span><i style="background:#ffc24b"></i> Consumo</span>
+          <span><i style="background:#45e0ff"></i> Carga bateria (%)</span>
+        </div>
+      </div>
+
+      <!-- status dos módulos -->
+      <div class="panel"><span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="p-head"><div class="tick"></div><h2>Status dos Módulos Operacionais</h2><span class="idx" id="mod-count">06 ATIVOS</span></div>
+        <div class="p-body">
+          <div class="modgrid" id="modgrid"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- coluna direita -->
+    <div class="col">
+
+      <!-- sustentabilidade + fontes -->
+      <div class="panel"><span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="p-head"><div class="tick"></div><h2>Índice de Sustentabilidade</h2><span class="idx">ESG</span></div>
+        <div class="p-body">
+          <div class="ring-wrap">
+            <div class="ring">
+              <svg width="132" height="132" viewBox="0 0 132 132">
+                <circle cx="66" cy="66" r="56" fill="none" stroke="rgba(99,179,219,.12)" stroke-width="9"/>
+                <circle id="ring-prog" cx="66" cy="66" r="56" fill="none" stroke="#36e0a0" stroke-width="9"
+                        stroke-linecap="round" stroke-dasharray="351.8" stroke-dashoffset="351.8"/>
+              </svg>
+              <div class="ctr"><div class="big tnum" id="ring-val">0</div><div class="lab">ÍNDICE</div></div>
+            </div>
+            <div class="ring-info">
+              <div class="li"><span>Energia renovável</span><b id="info-ren">0%</b></div>
+              <div class="li"><span>Reserva (bateria)</span><b id="info-res">0%</b></div>
+              <div class="li"><span>Eficiência painéis</span><b id="info-eff">0%</b></div>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;">
+            <div class="vh" style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--txt-2);letter-spacing:1.2px;text-transform:uppercase;">Fonte de energia (instantânea)</span>
+            </div>
+            <div class="srcbar">
+              <div class="seg solar" id="seg-solar" style="width:60%"></div>
+              <div class="seg batt" id="seg-batt" style="width:40%"></div>
+            </div>
+            <div class="srckey">
+              <span><i style="background:#36e0a0"></i> Solar <b class="tnum" id="src-solar" style="color:var(--txt)">60%</b></span>
+              <span><i style="background:#45e0ff"></i> Bateria <b class="tnum" id="src-batt" style="color:var(--txt)">40%</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- vitais: comunicação + temperatura -->
+      <div class="panel"><span class="corner-tr"></span><span class="corner-bl"></span>
+        <div class="p-head"><div class="tick"></div><h2>Vitais da Nave</h2><span class="idx">TELEMETRIA</span></div>
+        <div class="p-body">
+
+          <div class="vital">
+            <div class="vh">
+              <span class="lab">Comunicação · Link com a Terra</span>
+              <span class="read tnum" id="comm-read" style="color:var(--green)">0%</span>
+            </div>
+            <div class="signal" id="signal"></div>
+            <div class="thermo-scale" style="margin-top:7px;"><span>Latência</span><span class="tnum" id="comm-lat">— ms</span></div>
+          </div>
+
+          <div class="vital">
+            <div class="vh">
+              <span class="lab">Temperatura · Cabine</span>
+              <span class="read tnum" id="temp-read" style="color:var(--green)">0 °C</span>
+            </div>
+            <div class="thermo"><div class="marker" id="temp-marker" style="left:30%"></div></div>
+            <div class="thermo-scale"><span>0°</span><span>15°</span><span>25°</span><span>35°</span><span>45°</span></div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============== FEEDS ============== -->
+  <div class="feeds">
+    <div class="panel feed"><span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="p-head"><div class="tick" style="background:var(--amber);box-shadow:0 0 12px var(--amber)"></div><h2>Central de Alertas</h2><span class="feed-pause">❚❚ pausado p/ leitura</span><span class="idx" id="alert-count">0 EVENTOS</span></div>
+      <div class="list" id="alert-list"></div>
+    </div>
+
+    <div class="panel feed"><span class="corner-tr"></span><span class="corner-bl"></span>
+      <div class="p-head"><div class="tick" style="background:var(--violet);box-shadow:0 0 12px var(--violet)"></div><h2>Decisões Automatizadas · IA</h2><span class="feed-pause">❚❚ pausado p/ leitura</span><span class="idx">RULES ENGINE</span></div>
+      <div class="list" id="decision-list"></div>
+    </div>
+  </div>
+
+  <!-- ============== CONSOLE DO OPERADOR (v2) ============== -->
+  <section class="panel console"><span class="corner-tr"></span><span class="corner-bl"></span>
+    <div class="p-head">
+      <div class="tick" style="background:var(--cyan);box-shadow:var(--glow-cyan)"></div>
+      <h2>Console do Operador · Injeção de Dados Simulados</h2>
+      <span class="con-mode" id="con-mode">OPERAÇÃO AUTOMÁTICA</span>
+    </div>
+    <div class="p-body">
+      <p class="con-help">Force valores ou dispare cenários para testar como o sistema <b>recebe, interpreta e responde</b> — observe os alertas e as decisões automáticas reagirem em tempo real nos painéis acima.</p>
+
+      <div class="con-grid">
+
+        <!-- GRUPO 1 — controles manuais -->
+        <div class="con-group">
+          <h3>1 · Controles Manuais <small>(arraste para forçar · AUTO libera)</small></h3>
+
+          <div class="sl-row">
+            <div class="sl-top"><span class="sl-lab">🌡 Temperatura · Cabine</span><span class="sl-val tnum" data-val="cabin">22.0 °C</span><button class="sl-auto" data-auto="cabin">AUTO</button></div>
+            <input type="range" id="sl-cabin" min="10" max="45" step="0.5" value="22">
+          </div>
+
+          <div class="sl-row">
+            <div class="sl-top"><span class="sl-lab">📡 Comunicação · Sinal</span><span class="sl-val tnum" data-val="signal">88 %</span><button class="sl-auto" data-auto="signal">AUTO</button></div>
+            <input type="range" id="sl-signal" min="0" max="100" step="1" value="88">
+          </div>
+
+          <div class="sl-row">
+            <div class="sl-top"><span class="sl-lab">☀ Energia · Geração Solar</span><span class="sl-val tnum" data-val="gen">10.5 kW</span><button class="sl-auto" data-auto="gen">AUTO</button></div>
+            <input type="range" id="sl-gen" min="0" max="14" step="0.1" value="10.5">
+          </div>
+
+          <div class="sl-row">
+            <div class="sl-top"><span class="sl-lab">⚡ Energia · Consumo Extra</span><span class="sl-val tnum" data-val="conBoost">+0.0 kW</span><button class="sl-auto" data-auto="conBoost">AUTO</button></div>
+            <input type="range" id="sl-con" min="0" max="8" step="0.1" value="0">
+          </div>
+
+          <div class="sl-row">
+            <div class="sl-top"><span class="sl-lab">🔋 Energia · Carga Bateria</span><span class="sl-val tnum" data-val="battery">78 %</span><button class="sl-auto" data-auto="battery">AUTO</button></div>
+            <input type="range" id="sl-bat" min="0" max="100" step="1" value="78">
+          </div>
+        </div>
+
+        <!-- GRUPO 2 — cenários -->
+        <div class="con-group">
+          <h3>2 · Cenários de Anomalia <small>(choque pontual)</small></h3>
+          <div class="btn-wrap">
+            <button class="cbtn warn" data-scenario="overheat">🔥 Superaquecimento</button>
+            <button class="cbtn warn" data-scenario="commloss">📡 Perda de Sinal</button>
+            <button class="cbtn warn" data-scenario="eclipse">🌑 Eclipse Orbital</button>
+            <button class="cbtn warn" data-scenario="surge">⚡ Pico de Consumo</button>
+            <button class="cbtn crit" data-scenario="solarstorm">🌩 Tempestade Solar</button>
+            <button class="cbtn crit" data-scenario="drainbat">🪫 Esvaziar Bateria</button>
+          </div>
+        </div>
+
+        <!-- GRUPO 3 — falha de módulo -->
+        <div class="con-group">
+          <h3>3 · Forçar Falha de Módulo <small>(status → crítico)</small></h3>
+          <div class="btn-wrap">
+            <button class="cbtn mod" data-fail="solar">☀ Painéis Solares</button>
+            <button class="cbtn mod" data-fail="bateria">🔋 Banco de Baterias</button>
+            <button class="cbtn mod" data-fail="suporte">🫁 Suporte de Vida</button>
+            <button class="cbtn mod" data-fail="comunic">📡 Comunicação</button>
+            <button class="cbtn mod" data-fail="propulsao">🚀 Propulsão</button>
+            <button class="cbtn mod" data-fail="termico">❄ Controle Térmico</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="con-actions">
+        <button class="cbtn reset" id="btn-reset">↺ Restaurar Condições Nominais</button>
+        <label class="con-toggle"><input type="checkbox" id="chk-pause"> Pausar anomalias automáticas</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== RODAPÉ ============== -->
+  <footer>
+    <div class="tags">
+      <span class="tag">Energia</span>
+      <span class="tag">Potência</span>
+      <span class="tag">Energias Renováveis</span>
+      <span class="tag">Sustentabilidade</span>
+    </div>
+    <div class="meta">ÓRION-7 · DATASET SIMULADO · v1.0</div>
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================
+   1. CONFIGURAÇÃO  — limiares de operação (thresholds)
+   ============================================================ */
+const CFG = {
+  tickMs: 1500,            // intervalo de atualização da lógica
+  histLen: 60,             // pontos guardados no gráfico (~90s)
+  batteryCapacityKWh: 40,  // capacidade do banco de baterias
+
+  // limiares para alertas e decisões
+  battery:   { warn: 25, crit: 15 },   // % de carga
+  cabinTemp: { warn: 27, crit: 30, coolOn: 32, coolOff: 27 },   // °C (coolOn liga / coolOff desliga a refrigeração)
+  comm:      { warn: 40, crit: 25 },   // % de sinal
+  genLow:    4,                        // kW — geração solar baixa
+};
+
+/* ============================================================
+   2. ESTADO  — todos os dados simulados da missão
+   ============================================================ */
+const state = {
+  metStart: Date.now(),
+  mode: 'NORMAL',          // NORMAL | ECONOMIA
+  sunFactor: 1,            // 0..1 exposição solar (gera dia/noite orbital)
+  orbitPhase: 0,
+
+  battery: { chargePct: 78, flow: 0 },   // flow>0 carregando, <0 descarregando
+
+  // módulos operacionais
+  modules: {
+    solar:     { name:'Painéis Solares',  gen:10.5, temp:84,  eff:92,  status:'ok' },
+    bateria:   { name:'Banco de Baterias',temp:23,  cycles:412,        status:'ok' },
+    suporte:   { name:'Suporte de Vida',  con:3.2,  integ:99,          status:'ok' },
+    comunic:   { name:'Comunicação',      signal:88,latency:740,       status:'ok' },
+    propulsao: { name:'Propulsão',        con:1.8,  temp:46,           status:'ok' },
+    termico:   { name:'Controle Térmico', cabin:22, load:38,           status:'ok' },
+  },
+
+  metrics: { gen:10.5, con:8.0, sus:0 },
+
+  // séries históricas p/ gráfico
+  hist: { gen:[], con:[], bat:[], gS:[], cS:[], bS:[], sS:[] },
+
+  alerts: [],
+  decisions: [],
+
+  // controle de borda dos alertas (evita repetição)
+  prevSev: { battery:'ok', cabin:'ok', comm:'ok', gen:'ok' },
+  coolOn: false,    // refrigeração: histerese — liga ao passar de 32 °C, desliga ao baixar de 27 °C
+  // cooldown das regras de decisão
+  ruleCooldown: {},
+  eventCooldown: 0,
+
+  // -- v2: INJEÇÃO MANUAL DE DADOS (Console do Operador) --
+  // null = automático (simulação livre); número = valor forçado pelo operador
+  ov: { cabin:null, signal:null, gen:null, battery:null, conBoost:0 },
+  pauseEvents: false,   // pausa as anomalias aleatórias durante um teste controlado
+};
+
+// valores exibidos (interpolados suavemente)
+const disp = { gen:0, con:0, bat:0, sus:0, comm:0, cabin:0, ring:0 };
+
+// [v3] feeds: renderização incremental (evita o "piscar") + pausa ao passar o mouse
+let _uid = 0;                          // id sequencial único por evento/decisão
+let _alertMaxId = 0, _decMaxId = 0;    // último id já desenhado em cada feed
+let _alertHover = false, _decHover = false;  // feed congela enquanto o mouse está sobre ele
+
+/* ============================================================
+   3. SIMULAÇÃO  — gera os dados de telemetria
+   ============================================================ */
+function rand(a,b){ return a + Math.random()*(b-a); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+function fmt(n,d=1){ return Number(n).toFixed(d); }
+
+function simulate(){
+  const m = state.modules;
+
+  // --- ciclo orbital: exposição solar oscila (dia/noite) ---
+  state.orbitPhase += 0.04;
+  state.sunFactor = clamp(0.55 + 0.45*Math.sin(state.orbitPhase), 0, 1);
+
+  // --- painéis solares (geração renovável) ---
+  m.solar.eff  = clamp(m.solar.eff + rand(-0.4,0.4), 78, 96);
+  m.solar.temp = clamp(m.solar.temp + rand(-1.5,1.5), 60, 125);
+  let baseGen  = 12.5 * state.sunFactor * (m.solar.eff/100);
+  m.solar.gen  = clamp(baseGen + rand(-0.4,0.4), 0, 14);
+  if (state.ov.gen != null) m.solar.gen = state.ov.gen;          // [v2] injeção: geração
+
+  // --- consumo dos módulos (potência) ---
+  const eco = state.mode === 'ECONOMIA' ? 0.62 : 1;   // economia reduz cargas
+  m.suporte.con   = clamp(3.2*eco + rand(-0.15,0.15), 1.5, 4.5);
+  m.propulsao.con = clamp(1.8*eco + rand(-0.2,0.2), 0.4, 3.2);
+  m.termico.load  = clamp(m.termico.load + rand(-2,2), 20, 95);
+  const thermalCon= m.termico.load/100 * 2.4;
+  const commCon   = 0.9 + (100-m.comunic.signal)/100 * 0.6;
+  const totalCon  = m.suporte.con + m.propulsao.con + thermalCon + commCon + state.ov.conBoost; // [v2] +consumo injetado
+
+  // --- bateria: carrega/descarrega conforme balanço ---
+  const net = m.solar.gen - totalCon;            // kW excedente (+) ou déficit (-)
+  state.battery.flow = net;
+  const deltaPct = (net * (CFG.tickMs/3600000)) / CFG.batteryCapacityKWh * 100;
+  state.battery.chargePct = clamp(state.battery.chargePct + deltaPct, 0, 100);
+  if (state.ov.battery != null) state.battery.chargePct = state.ov.battery;  // [v2] injeção: bateria
+
+  // --- temperatura da cabine (controle térmico) ---
+  // tende à temperatura nominal (~22 °C); com a refrigeração LIGADA, esfria mais rápido
+  let tDrift = rand(-0.3,0.3) + (22 - m.termico.cabin)*0.05;
+  if (state.coolOn) tDrift -= 0.6;                // refrigeração ativa → puxa a temperatura para baixo
+  m.termico.cabin = clamp(m.termico.cabin + tDrift, 16, 40);
+  if (state.ov.cabin != null) m.termico.cabin = state.ov.cabin;   // [v2] injeção: temperatura
+  m.bateria.temp  = clamp(m.bateria.temp + rand(-0.4,0.4), 15, 45);
+  m.propulsao.temp= clamp(m.propulsao.temp + rand(-1,1.2), 30, 90);
+
+  // --- comunicação ---
+  m.comunic.signal  = clamp(m.comunic.signal + rand(-2.5,2.2), 0, 100);
+  if (state.ov.signal != null) m.comunic.signal = state.ov.signal; // [v2] injeção: comunicação
+  m.comunic.latency = Math.round(clamp(740 + (100-m.comunic.signal)*5 + rand(-30,30), 600, 1500));
+  m.suporte.integ   = clamp(m.suporte.integ + rand(-0.2,0.15), 90, 100);
+
+  // --- eventos aleatórios (anomalias) para exercitar o sistema ---
+  injectRandomEvent();
+
+  // --- métricas agregadas ---
+  state.metrics.gen = m.solar.gen;
+  state.metrics.con = totalCon;
+  state.metrics.sus = computeSustainability(totalCon);
+
+  // --- status de cada módulo (regras lógicas) ---
+  evaluateModuleStatus();
+  // --- alertas (disparo por borda) ---
+  evaluateAlerts();
+  // --- decisões automatizadas (motor de regras / IA básica) ---
+  decisionEngine(totalCon);
+
+  // --- guarda histórico p/ gráfico ---
+  pushHist(state.hist.gen, m.solar.gen);
+  pushHist(state.hist.con, totalCon);
+  pushHist(state.hist.bat, state.battery.chargePct);
+  pushHist(state.hist.gS, m.solar.gen);     // sparkline geração
+  pushHist(state.hist.cS, totalCon);        // sparkline consumo
+  pushHist(state.hist.bS, state.battery.chargePct);
+  pushHist(state.hist.sS, state.metrics.sus);
+}
+
+function pushHist(arr,v){ arr.push(v); if(arr.length>CFG.histLen) arr.shift(); }
+
+// índice de sustentabilidade = renováveis(50%) + reserva(30%) + eficiência(20%)
+function computeSustainability(con){
+  const m = state.modules;
+  const solarToLoad = Math.min(m.solar.gen, con);
+  const renShare = con>0 ? (solarToLoad/con)*100 : 100;
+  const sus = 0.5*renShare + 0.3*state.battery.chargePct + 0.2*m.solar.eff;
+  return clamp(sus, 0, 100);
+}
+
+let pendingEvent = null;
+function injectRandomEvent(){
+  if (state.pauseEvents) return;                 // [v2] operador pausou as anomalias
+  if (state.eventCooldown > 0){ state.eventCooldown--; return; }
+  if (Math.random() < 0.14){     // ~chance por tick
+    const ev = EVENTS[Math.floor(Math.random()*EVENTS.length)];
+    ev.apply(state);
+    pushAlert(ev.sev, ev.title, ev.module);
+    state.eventCooldown = 6;     // espera antes do próximo evento
+  }
+}
+const EVENTS = [
+  { sev:'warn', module:'PAINEL SOLAR', title:'Impacto de micrometeoroide reduziu eficiência dos painéis',
+    apply:s=>{ s.modules.solar.eff = clamp(s.modules.solar.eff-12,78,96); } },
+  { sev:'crit', module:'TÉRMICO', title:'Pico térmico detectado na cabine pressurizada',
+    apply:s=>{ s.modules.termico.cabin = clamp(s.modules.termico.cabin+6,16,38); } },
+  { sev:'warn', module:'COMUNICAÇÃO', title:'Interferência solar degradou o sinal de uplink',
+    apply:s=>{ s.modules.comunic.signal = clamp(s.modules.comunic.signal-30,0,100); } },
+  { sev:'crit', module:'ENERGIA', title:'Pico de demanda no suporte de vida elevou o consumo',
+    apply:s=>{ s.modules.suporte.con = clamp(s.modules.suporte.con+1.6,1.5,4.5); } },
+  { sev:'info', module:'ÓRBITA', title:'Nave entrando em sombra orbital — geração solar em queda',
+    apply:s=>{ s.orbitPhase += 1.5; } },
+];
+
+/* ============================================================
+   4. STATUS DOS MÓDULOS  — classificação por regras
+   ============================================================ */
+function sev3(value, warn, crit, invert=false){
+  // invert=true: valor BAIXO é ruim (ex.: bateria, sinal)
+  if (invert){ if(value<=crit) return 'crit'; if(value<=warn) return 'warn'; return 'ok'; }
+  if (value>=crit) return 'crit'; if(value>=warn) return 'warn'; return 'ok';
+}
+function worst(...s){ if(s.includes('crit'))return'crit'; if(s.includes('warn'))return'warn'; return'ok'; }
+
+function evaluateModuleStatus(){
+  const m = state.modules;
+  m.solar.status     = worst(sev3(m.solar.temp,110,120), sev3(m.solar.eff,82,79,true));
+  m.bateria.status   = worst(sev3(state.battery.chargePct,CFG.battery.warn,CFG.battery.crit,true), sev3(m.bateria.temp,38,42));
+  m.suporte.status   = sev3(m.suporte.integ,94,92,true);
+  m.comunic.status   = sev3(m.comunic.signal,CFG.comm.warn,CFG.comm.crit,true);
+  m.propulsao.status = sev3(m.propulsao.temp,75,85);
+  m.termico.status   = sev3(m.termico.cabin,CFG.cabinTemp.warn,CFG.cabinTemp.crit);
+}
+
+function globalStatus(){
+  const arr = Object.values(state.modules).map(x=>x.status);
+  return worst(...arr);
+}
+
+/* ============================================================
+   5. SISTEMA DE ALERTAS  — disparo por mudança de severidade
+   ============================================================ */
+const SEV_RANK = { ok:0, warn:1, crit:2 };
+function pushAlert(sev, title, module){
+  state.alerts.unshift({ id:++_uid, sev, title, module, t:metClock(), ts:Date.now() });
+  if (state.alerts.length>40) state.alerts.pop();
+}
+function checkEdge(key, sev, warnMsg, critMsg, module, recoverMsg){
+  const prev = state.prevSev[key];
+  if (SEV_RANK[sev] > SEV_RANK[prev]){
+    pushAlert(sev, sev==='crit'?critMsg:warnMsg, module);
+  } else if (sev==='ok' && prev!=='ok'){
+    pushAlert('good', recoverMsg, module);
+  }
+  state.prevSev[key] = sev;
+}
+function evaluateAlerts(){
+  const m = state.modules, b = state.battery.chargePct;
+  checkEdge('battery', sev3(b,CFG.battery.warn,CFG.battery.crit,true),
+    'Carga da bateria abaixo do nível seguro', 'CRÍTICO: reserva de energia esgotando',
+    'BATERIA', 'Carga da bateria restabelecida');
+  checkEdge('cabin', sev3(m.termico.cabin,CFG.cabinTemp.warn,CFG.cabinTemp.crit),
+    'Temperatura da cabine acima do ideal', 'CRÍTICO: superaquecimento da cabine',
+    'TÉRMICO', 'Temperatura da cabine normalizada');
+  checkEdge('comm', sev3(m.comunic.signal,CFG.comm.warn,CFG.comm.crit,true),
+    'Sinal de comunicação enfraquecendo', 'CRÍTICO: link com a Terra instável',
+    'COMUNICAÇÃO', 'Comunicação com a Terra restabelecida');
+  checkEdge('gen', m.solar.gen<CFG.genLow ? 'warn':'ok',
+    'Geração solar abaixo do esperado', '', 'PAINEL SOLAR',
+    'Geração solar normalizada');
+}
+
+/* ============================================================
+   6. MOTOR DE DECISÃO  — respostas automatizadas (IA básica)
+   ============================================================ */
+function pushDecision(title, detail){
+  state.decisions.unshift({ id:++_uid, title, detail, t:metClock(), ts:Date.now() });
+  if (state.decisions.length>40) state.decisions.pop();
+}
+function cooldownOk(rule, secs){
+  const now = Date.now();
+  if (state.ruleCooldown[rule] && now-state.ruleCooldown[rule] < secs*1000) return false;
+  state.ruleCooldown[rule] = now; return true;
+}
+function decisionEngine(con){
+  const m = state.modules, b = state.battery.chargePct;
+
+  // R1 — bateria crítica → modo de economia de energia
+  if (b < CFG.battery.warn && state.mode==='NORMAL' && cooldownOk('eco_on',5)){
+    state.mode = 'ECONOMIA';
+    pushDecision('Modo de economia de energia ATIVADO',
+      'Carga em '+Math.round(b)+'% → cargas não essenciais reduzidas em 38%.');
+  }
+  // R2 — bateria recuperada → volta ao normal
+  if (b > 55 && state.mode==='ECONOMIA' && cooldownOk('eco_off',5)){
+    state.mode = 'NORMAL';
+    pushDecision('Operação normal RESTAURADA',
+      'Reserva em '+Math.round(b)+'% → consumo pleno reabilitado.');
+  }
+  // R3 — excedente solar → carregar baterias
+  if (m.solar.gen > con+1.5 && b < 92 && cooldownOk('charge',9)){
+    pushDecision('Roteando excedente solar para as baterias',
+      'Geração ('+fmt(m.solar.gen)+' kW) > consumo ('+fmt(con)+' kW). Carregando reserva.');
+  }
+  // R4 — refrigeração com HISTERESE: LIGA ao passar de 32 °C e só DESLIGA ao baixar de 27 °C.
+  //      Aciona e desliga UMA única vez por ciclo (não fica ligando/desligando repetidamente).
+  if (!state.coolOn && m.termico.cabin > CFG.cabinTemp.coolOn){
+    state.coolOn = true;
+    m.termico.load = clamp(m.termico.load+22, 20, 100);
+    pushDecision('Sistema de refrigeração ACIONADO',
+      'Cabine passou de 32 °C ('+fmt(m.termico.cabin)+' °C) → dissipadores em '+Math.round(m.termico.load)+'%.');
+  } else if (state.coolOn && m.termico.cabin < CFG.cabinTemp.coolOff){
+    state.coolOn = false;
+    m.termico.load = clamp(m.termico.load-18, 20, 100);
+    pushDecision('Sistema de refrigeração DESLIGADO',
+      'Cabine normalizou abaixo de 27 °C ('+fmt(m.termico.cabin)+' °C) → refrigeração encerrada.');
+  }
+  // R5 — sinal fraco → realinhar antena
+  if (m.comunic.signal < CFG.comm.warn && cooldownOk('antenna',8)){
+    m.comunic.signal = clamp(m.comunic.signal+28, 0, 100);
+    pushDecision('Realinhando antena de alto ganho',
+      'Sinal baixo → reorientação automática para maximizar o uplink.');
+  }
+  // R6 — painel superaquecido → reduzir carga térmica
+  if (m.solar.temp > 115 && cooldownOk('panel',8)){
+    pushDecision('Reduzindo exposição dos painéis solares',
+      'Temperatura a '+fmt(m.solar.temp)+' °C → ajuste de inclinação para proteção.');
+  }
+}
+
+/* ============================================================
+   7. RELÓGIOS
+   ============================================================ */
+function metClock(){
+  let s = Math.floor((Date.now()-state.metStart)/1000);
+  const d=Math.floor(s/86400); s%=86400;
+  const h=Math.floor(s/3600);  s%=3600;
+  const mi=Math.floor(s/60);   const se=s%60;
+  const p=n=>String(n).padStart(2,'0');
+  return 'T+'+p(d)+':'+p(h)+':'+p(mi)+':'+p(se);
+}
+function updateClocks(){
+  document.getElementById('met').textContent = metClock();
+  document.getElementById('utc').textContent = new Date().toUTCString().slice(17,25);
+}
+
+/* ============================================================
+   8. RENDERIZAÇÃO  — atualiza o DOM
+   ============================================================ */
+const STN = { ok:'NOMINAL', warn:'ATENÇÃO', crit:'CRÍTICO' };
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function renderNumbers(){
+  // interpola valores exibidos p/ suavidade
+  disp.gen   = lerp(disp.gen,   state.metrics.gen, .12);
+  disp.con   = lerp(disp.con,   state.metrics.con, .12);
+  disp.bat   = lerp(disp.bat,   state.battery.chargePct, .12);
+  disp.sus   = lerp(disp.sus,   state.metrics.sus, .1);
+  disp.comm  = lerp(disp.comm,  state.modules.comunic.signal, .12);
+  disp.cabin = lerp(disp.cabin, state.modules.termico.cabin, .12);
+  disp.ring  = lerp(disp.ring,  state.metrics.sus, .08);
+
+  document.getElementById('kpi-gen').textContent = fmt(disp.gen);
+  document.getElementById('kpi-con').textContent = fmt(disp.con);
+  document.getElementById('kpi-bat').textContent = Math.round(disp.bat);
+  document.getElementById('kpi-sus').textContent = Math.round(disp.sus);
+
+  // fluxo da bateria
+  const flow = state.battery.flow;
+  const bf = document.getElementById('bat-flow');
+  bf.textContent = flow>0.1 ? 'carregando ▲' : flow<-0.1 ? 'descarregando ▼' : 'em equilíbrio';
+
+  // tendências (comparando início/fim do histórico curto)
+  setTrend('trend-gen', state.hist.gS);
+  setTrend('trend-con', state.hist.cS);
+  setTrend('trend-bat', state.hist.bS);
+  setTrend('trend-sus', state.hist.sS);
+}
+function setTrend(id, arr){
+  const el = document.getElementById(id);
+  if(arr.length<6){ el.textContent='—'; el.className='trend'; return; }
+  const d = arr[arr.length-1]-arr[arr.length-6];
+  if(d>0.2){ el.textContent='▲ '+fmt(Math.abs(d)); el.className='trend up'; }
+  else if(d<-0.2){ el.textContent='▼ '+fmt(Math.abs(d)); el.className='trend down'; }
+  else { el.textContent='● estável'; el.className='trend'; }
+}
+
+function renderStatusBar(){
+  const g = globalStatus();
+  const pill = document.getElementById('statuspill');
+  pill.className = 'statuspill '+g;
+  document.getElementById('globalstatus').textContent = STN[g];
+}
+
+function renderModules(){
+  const grid = document.getElementById('modgrid');
+  const m = state.modules;
+  const defs = [
+    { ...m.solar,   s:m.solar.status,   a:['Geração',fmt(m.solar.gen)+' kW'], b:['Temp',Math.round(m.solar.temp)+'°C'], bar:m.solar.eff },
+    { ...m.bateria, s:m.bateria.status, a:['Carga',Math.round(state.battery.chargePct)+'%'], b:['Temp',Math.round(m.bateria.temp)+'°C'], bar:state.battery.chargePct },
+    { ...m.suporte, s:m.suporte.status, a:['Consumo',fmt(m.suporte.con)+' kW'], b:['Integ.',Math.round(m.suporte.integ)+'%'], bar:m.suporte.integ },
+    { ...m.comunic, s:m.comunic.status, a:['Sinal',Math.round(m.comunic.signal)+'%'], b:['Latência',m.comunic.latency+'ms'], bar:m.comunic.signal },
+    { ...m.propulsao,s:m.propulsao.status,a:['Consumo',fmt(m.propulsao.con)+' kW'], b:['Temp',Math.round(m.propulsao.temp)+'°C'], bar:clamp(100-(m.propulsao.temp-30)/0.6,0,100) },
+    { ...m.termico, s:m.termico.status, a:['Cabine',fmt(m.termico.cabin)+'°C'], b:['Carga',Math.round(m.termico.load)+'%'], bar:m.termico.load },
+  ];
+  grid.innerHTML = defs.map(d=>`
+    <div class="mod ${d.s}">
+      <div class="r1">
+        <span class="mname">${d.name}</span>
+        <span class="st"><span class="d"></span>${STN[d.s]}</span>
+      </div>
+      <div class="metrics">
+        <div class="m"><div class="lab">${d.a[0]}</div><div class="num">${d.a[1]}</div></div>
+        <div class="m"><div class="lab">${d.b[0]}</div><div class="num">${d.b[1]}</div></div>
+      </div>
+      <div class="bar"><i style="width:${clamp(d.bar,3,100)}%"></i></div>
+    </div>`).join('');
+}
+
+function renderSustainability(con){
+  const m = state.modules;
+  const solarToLoad = Math.min(m.solar.gen, con);
+  const renShare = con>0 ? (solarToLoad/con)*100 : 100;
+  const batShare = 100-renShare;
+
+  // anel
+  const ring = document.getElementById('ring-prog');
+  const C = 351.8;
+  ring.style.strokeDashoffset = C - (disp.ring/100)*C;
+  const col = disp.ring>=70?'#36e0a0':disp.ring>=45?'#ffc24b':'#ff5d73';
+  ring.style.stroke = col;
+  document.getElementById('ring-val').textContent = Math.round(disp.ring);
+  document.getElementById('ring-val').style.color = col;
+
+  document.getElementById('info-ren').textContent = Math.round(renShare)+'%';
+  document.getElementById('info-res').textContent = Math.round(state.battery.chargePct)+'%';
+  document.getElementById('info-eff').textContent = Math.round(m.solar.eff)+'%';
+
+  // fontes de energia
+  document.getElementById('seg-solar').style.width = renShare+'%';
+  document.getElementById('seg-batt').style.width = batShare+'%';
+  document.getElementById('src-solar').textContent = Math.round(renShare)+'%';
+  document.getElementById('src-batt').textContent = Math.round(batShare)+'%';
+}
+
+function renderVitals(){
+  const m = state.modules;
+  // comunicação — barras de sinal
+  const sig = document.getElementById('signal');
+  if(sig.children.length===0){ for(let i=0;i<7;i++){ const b=document.createElement('i'); b.style.height=(35+i*9)+'%'; sig.appendChild(b);} }
+  const on = Math.round(disp.comm/100*7);
+  [...sig.children].forEach((b,i)=> b.classList.toggle('on', i<on));
+  const cr = document.getElementById('comm-read');
+  cr.textContent = Math.round(disp.comm)+'%';
+  cr.style.color = disp.comm>=CFG.comm.warn?'#36e0a0':disp.comm>=CFG.comm.crit?'#ffc24b':'#ff5d73';
+  document.getElementById('comm-lat').textContent = m.comunic.latency+' ms';
+
+  // temperatura — marcador
+  const tr = document.getElementById('temp-read');
+  tr.textContent = fmt(disp.cabin)+' °C';
+  tr.style.color = disp.cabin<CFG.cabinTemp.warn?'#36e0a0':disp.cabin<CFG.cabinTemp.crit?'#ffc24b':'#ff5d73';
+  document.getElementById('temp-marker').style.left = clamp(disp.cabin/45*100,2,98)+'%';
+}
+
+// monta o HTML de UM item (usado só quando o item é novo)
+const ALERT_ICONS = { crit:'⨯', warn:'△', info:'◇', good:'✓' };
+function alertHTML(a){
+  return `<div class="alert ${a.sev}">
+      <div class="ai">${ALERT_ICONS[a.sev]||'◇'}</div>
+      <div class="body">
+        <div class="ttl">${a.title}</div>
+        <div class="meta"><span class="tag">${a.module}</span><span>${a.t}</span></div>
+      </div>
+    </div>`;
+}
+function decisionHTML(d){
+  return `<div class="alert decision">
+      <div class="ai">⟐</div>
+      <div class="body">
+        <div class="ttl">${d.title}</div>
+        <div style="font-family:IBM Plex Mono,monospace;font-size:10px;color:var(--txt-2);margin-top:4px;line-height:1.4">${d.detail}</div>
+        <div class="meta"><span class="tag">AÇÃO AUTOMÁTICA</span><span>${d.t}</span></div>
+      </div>
+    </div>`;
+}
+
+// adiciona ao feed APENAS os itens novos (id > lastId). Não recria os antigos:
+// assim eles não re-animam e o que você está lendo não some.
+function pumpFeed(listEl, items, lastId, renderFn, hover){
+  if(hover) return lastId;                       // congelado: você está lendo este feed
+  const news = [];
+  for(const it of items){ if(it.id>lastId) news.push(it); else break; } // items: mais novo→mais antigo
+  if(!news.length) return lastId;
+
+  const atTop = listEl.scrollTop <= 4;           // você está no topo (vendo os mais recentes)?
+  const beforeH = listEl.scrollHeight;
+  for(let i=news.length-1;i>=0;i--){             // insere do mais antigo p/ o mais novo → mais novo no topo
+    listEl.insertAdjacentHTML('afterbegin', renderFn(news[i]));
+  }
+  while(listEl.children.length>40) listEl.removeChild(listEl.lastChild);  // limita o histórico no DOM
+  if(!atTop){                                    // se você rolou p/ ler algo, mantém a posição estável
+    listEl.scrollTop += (listEl.scrollHeight - beforeH);
+  }
+  return news[0].id;
+}
+
+function renderFeeds(){
+  _alertMaxId = pumpFeed(document.getElementById('alert-list'),    state.alerts,    _alertMaxId, alertHTML,    _alertHover);
+  _decMaxId   = pumpFeed(document.getElementById('decision-list'), state.decisions, _decMaxId,   decisionHTML, _decHover);
+  document.getElementById('alert-count').textContent = state.alerts.length+' EVENTOS';
+}
+
+// congela o feed enquanto o mouse está sobre ele; ao sair, atualiza o que ficou pendente
+function wireFeeds(){
+  const al = document.getElementById('alert-list').closest('.feed');
+  const de = document.getElementById('decision-list').closest('.feed');
+  al.addEventListener('mouseenter', ()=>{ _alertHover=true;  al.classList.add('paused'); });
+  al.addEventListener('mouseleave', ()=>{ _alertHover=false; al.classList.remove('paused'); renderFeeds(); });
+  de.addEventListener('mouseenter', ()=>{ _decHover=true;    de.classList.add('paused'); });
+  de.addEventListener('mouseleave', ()=>{ _decHover=false;   de.classList.remove('paused'); renderFeeds(); });
+}
+
+/* ============================================================
+   9. GRÁFICOS EM CANVAS  (desenhados à mão, sem bibliotecas)
+   ============================================================ */
+function setupCanvas(cv){
+  const dpr = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width*dpr; cv.height = r.height*dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return { ctx, w:r.width, h:r.height };
+}
+
+function drawChart(){
+  const cv = document.getElementById('chart');
+  const { ctx, w, h } = setupCanvas(cv);
+  ctx.clearRect(0,0,w,h);
+  const pad = { l:38, r:40, t:14, b:22 };
+  const gw = w-pad.l-pad.r, gh = h-pad.t-pad.b;
+
+  // grade
+  ctx.strokeStyle = 'rgba(99,179,219,.10)'; ctx.lineWidth=1; ctx.font='9px "IBM Plex Mono"'; ctx.fillStyle='#51697f';
+  const maxKW = 16;
+  for(let i=0;i<=4;i++){
+    const y = pad.t + gh*(i/4);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+gw,y); ctx.stroke();
+    ctx.textAlign='right'; ctx.fillText(Math.round(maxKW*(1-i/4)), pad.l-7, y+3);
+  }
+  // eixo direito (% bateria)
+  ctx.textAlign='left'; ctx.fillStyle='#1d7fa3';
+  for(let i=0;i<=4;i++){ const y=pad.t+gh*(i/4); ctx.fillText(Math.round(100*(1-i/4))+'%', pad.l+gw+6, y+3); }
+
+  const G=state.hist.gen, C=state.hist.con, B=state.hist.bat;
+  const n=G.length; if(n<2){ return; }
+  const X = i => pad.l + gw*(i/(CFG.histLen-1));
+  const Ykw = v => pad.t + gh*(1 - clamp(v,0,maxKW)/maxKW);
+  const Ypc = v => pad.t + gh*(1 - clamp(v,0,100)/100);
+
+  // área + linha geração
+  drawSeries(ctx, G, X, Ykw, '#36e0a0', 'rgba(54,224,160,.16)', n, true);
+  // área + linha consumo
+  drawSeries(ctx, C, X, Ykw, '#ffc24b', 'rgba(255,194,75,.13)', n, true);
+  // linha bateria (eixo %)
+  drawSeries(ctx, B, X, Ypc, '#45e0ff', null, n, false);
+
+  // ponto final pulsante na geração
+  const lg = G[n-1];
+  ctx.beginPath(); ctx.arc(X(n-1), Ykw(lg), 3.4, 0, Math.PI*2);
+  ctx.fillStyle='#36e0a0'; ctx.shadowColor='#36e0a0'; ctx.shadowBlur=10; ctx.fill(); ctx.shadowBlur=0;
+}
+function drawSeries(ctx, arr, X, Y, color, fill, n, area){
+  if(fill){
+    ctx.beginPath(); ctx.moveTo(X(0), Y(arr[0]));
+    for(let i=1;i<n;i++) ctx.lineTo(X(i), Y(arr[i]));
+    const lastY = ctx.canvas.height; // fechar até base
+    ctx.lineTo(X(n-1), Y(0)); ctx.lineTo(X(0), Y(0)); ctx.closePath();
+    ctx.fillStyle=fill; ctx.fill();
+  }
+  ctx.beginPath(); ctx.moveTo(X(0), Y(arr[0]));
+  for(let i=1;i<n;i++) ctx.lineTo(X(i), Y(arr[i]));
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.lineJoin='round';
+  ctx.shadowColor=color; ctx.shadowBlur=area?6:4; ctx.stroke(); ctx.shadowBlur=0;
+}
+
+function drawSpark(id, arr, color){
+  const cv = document.getElementById(id);
+  const { ctx, w, h } = setupCanvas(cv);
+  ctx.clearRect(0,0,w,h);
+  if(arr.length<2) return;
+  const mn=Math.min(...arr), mx=Math.max(...arr), rng=(mx-mn)||1;
+  const X=i=>w*(i/(CFG.histLen-1)); const Y=v=>h-3-(h-6)*((v-mn)/rng);
+  // área
+  ctx.beginPath(); ctx.moveTo(X(0),Y(arr[0]));
+  for(let i=1;i<arr.length;i++) ctx.lineTo(X(i),Y(arr[i]));
+  ctx.lineTo(X(arr.length-1),h); ctx.lineTo(X(0),h); ctx.closePath();
+  const grad=ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,color+'44'); grad.addColorStop(1,color+'00');
+  ctx.fillStyle=grad; ctx.fill();
+  // linha
+  ctx.beginPath(); ctx.moveTo(X(0),Y(arr[0]));
+  for(let i=1;i<arr.length;i++) ctx.lineTo(X(i),Y(arr[i]));
+  ctx.strokeStyle=color; ctx.lineWidth=1.6; ctx.stroke();
+}
+
+/* ============================================================
+   10. CAMPO DE ESTRELAS  (fundo animado)
+   ============================================================ */
+const sky = document.getElementById('starfield');
+const sctx = sky.getContext('2d');
+let stars=[];
+function initStars(){
+  sky.width=innerWidth; sky.height=innerHeight;
+  const count=Math.floor(innerWidth*innerHeight/9000);
+  stars=Array.from({length:count},()=>({
+    x:Math.random()*innerWidth, y:Math.random()*innerHeight,
+    z:Math.random()*0.7+0.3, r:Math.random()*1.3+0.2,
+    tw:Math.random()*Math.PI*2
+  }));
+}
+function drawStars(t){
+  sctx.clearRect(0,0,sky.width,sky.height);
+  for(const s of stars){
+    s.y += s.z*0.12; if(s.y>sky.height){ s.y=0; s.x=Math.random()*sky.width; }
+    const a=0.35+0.45*Math.sin(t*0.001+s.tw);
+    sctx.beginPath(); sctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    sctx.fillStyle=`rgba(${150+s.z*60},${200+s.z*40},255,${a*s.z})`; sctx.fill();
+  }
+}
+
+/* ============================================================
+   11. LOOPS PRINCIPAIS
+   ============================================================ */
+// loop de lógica (passo de simulação)
+function logicTick(){
+  simulate();
+  renderModules();
+  renderFeeds();
+  document.getElementById('alert-count');
+}
+// loop de animação (suaviza números e redesenha)
+function frame(t){
+  updateClocks();
+  renderNumbers();
+  renderStatusBar();
+  renderSustainability(state.metrics.con);
+  renderVitals();
+  drawChart();
+  drawSpark('spark-gen', state.hist.gS, '#36e0a0');
+  drawSpark('spark-con', state.hist.cS, '#ffc24b');
+  drawSpark('spark-bat', state.hist.bS, '#45e0ff');
+  drawSpark('spark-sus', state.hist.sS, '#8b7dff');
+  drawStars(t);
+  syncConsole();                 // [v2] sliders em modo AUTO acompanham os dados ao vivo
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   13. CONSOLE DO OPERADOR — ferramentas de injeção de dados [v2]
+   Permite forçar valores e disparar cenários para testar as
+   respostas do sistema (alertas + decisões automáticas).
+   ============================================================ */
+
+// sliders manuais → cada um controla um campo de override em state.ov
+const SLIDERS = [
+  { id:'sl-cabin',  field:'cabin',    live:()=>state.modules.termico.cabin, unit:'°C', dec:1 },
+  { id:'sl-signal', field:'signal',   live:()=>state.modules.comunic.signal, unit:'%',  dec:0 },
+  { id:'sl-gen',    field:'gen',      live:()=>state.modules.solar.gen,      unit:'kW', dec:1 },
+  { id:'sl-con',    field:'conBoost', live:()=>state.ov.conBoost,            unit:'kW', dec:1, additive:true },
+  { id:'sl-bat',    field:'battery',  live:()=>state.battery.chargePct,      unit:'%',  dec:0 },
+];
+
+function isManual(f){ return f==='conBoost' ? state.ov.conBoost!==0 : state.ov[f]!==null; }
+function anyManual(){ return SLIDERS.some(s=>isManual(s.field)); }
+function setManual(f,v){ if(f==='conBoost') state.ov.conBoost=v; else state.ov[f]=v; }
+function setAuto(f){ if(f==='conBoost') state.ov.conBoost=0; else state.ov[f]=null; }
+
+// liga todos os controles da interface
+function wireConsole(){
+  SLIDERS.forEach(s=>{
+    const el = document.getElementById(s.id); if(!el) return;
+    el.addEventListener('input', ()=>{
+      setManual(s.field, parseFloat(el.value));
+      const out = document.querySelector('[data-val="'+s.field+'"]');
+      if(out) out.textContent = (s.additive?'+':'')+parseFloat(el.value).toFixed(s.dec)+' '+s.unit;
+      el.closest('.sl-row').classList.add('manual');
+    });
+    const auto = document.querySelector('[data-auto="'+s.field+'"]');
+    if(auto) auto.addEventListener('click', ()=>{
+      setAuto(s.field);
+      el.closest('.sl-row').classList.remove('manual');
+    });
+  });
+  document.querySelectorAll('[data-scenario]').forEach(b=>{
+    b.addEventListener('click', ()=> runScenario(b.dataset.scenario));
+  });
+  document.querySelectorAll('[data-fail]').forEach(b=>{
+    b.addEventListener('click', ()=> forceModuleFault(b.dataset.fail));
+  });
+  document.getElementById('btn-reset').addEventListener('click', restoreNominal);
+  const pause = document.getElementById('chk-pause');
+  pause.addEventListener('change', ()=>{
+    state.pauseEvents = pause.checked;
+    pushAlert(pause.checked?'info':'good',
+      pause.checked?'Anomalias automáticas PAUSADAS pelo operador':'Anomalias automáticas RETOMADAS','CONSOLE');
+  });
+}
+
+// loop: sliders em AUTO acompanham os dados ao vivo; atualiza o selo de modo
+function syncConsole(){
+  SLIDERS.forEach(s=>{
+    const el = document.getElementById(s.id); if(!el) return;
+    const out = document.querySelector('[data-val="'+s.field+'"]');
+    if(s.additive){                       // consumo extra: sempre reflete state.ov.conBoost
+      el.value = state.ov.conBoost;
+      if(out) out.textContent = '+'+Number(state.ov.conBoost).toFixed(s.dec)+' '+s.unit;
+      const row = el.closest('.sl-row');
+      if(row) row.classList.toggle('manual', state.ov.conBoost!==0);
+      return;
+    }
+    if(isManual(s.field)) return;          // em modo manual o operador controla o slider
+    const v = s.live();
+    el.value = v;
+    if(out) out.textContent = Number(v).toFixed(s.dec)+' '+s.unit;
+  });
+  const badge = document.getElementById('con-mode');
+  if(badge){
+    const man = anyManual() || state.pauseEvents;
+    badge.textContent = man ? 'MODO MANUAL ATIVO' : 'OPERAÇÃO AUTOMÁTICA';
+    badge.className = 'con-mode' + (man?' on':'');
+  }
+}
+
+// CENÁRIOS — cada ação move (e segura) a barra manual correspondente, para você
+// ver exatamente o que mudou. A barra fica âmbar (manual); use AUTO ou
+// "Restaurar Condições Nominais" para liberar e deixar o sistema recuperar.
+let boostTimer = null;
+
+// aplica um override E move a barra correspondente (com destaque manual)
+function injectSlider(field, value){
+  if(field==='conBoost') state.ov.conBoost = value; else state.ov[field] = value;
+  const s = SLIDERS.find(x=>x.field===field); if(!s) return;
+  const el = document.getElementById(s.id); if(!el) return;
+  el.value = value;
+  const out = document.querySelector('[data-val="'+field+'"]');
+  if(out) out.textContent = (s.additive?'+':'') + Number(value).toFixed(s.dec) + ' ' + s.unit;
+  const row = el.closest('.sl-row'); if(row) row.classList.add('manual');
+}
+
+function runScenario(key){
+  const S = {
+    overheat:  ()=>{ injectSlider('cabin',33);   pushAlert('crit','Injeção: superaquecimento da cabine','TÉRMICO'); },
+    commloss:  ()=>{ injectSlider('signal',8);    pushAlert('crit','Injeção: perda de sinal de comunicação','COMUNICAÇÃO'); },
+    eclipse:   ()=>{ injectSlider('gen',1.5); state.orbitPhase += 1.6; pushAlert('warn','Injeção: eclipse orbital — geração em queda','ÓRBITA'); },
+    surge:     ()=>{ injectSlider('conBoost',5);  pushAlert('warn','Injeção: pico de consumo de energia','ENERGIA'); },
+    solarstorm:()=>{ injectSlider('signal',12); injectSlider('gen',3); injectSlider('cabin',28); pushAlert('crit','Injeção: tempestade solar (multi-sistema)','TEMPESTADE'); },
+    drainbat:  ()=>{ injectSlider('battery',10);  pushAlert('crit','Injeção: bateria esvaziada para 10%','BATERIA'); },
+  };
+  (S[key] || (()=>{}))();
+}
+
+// FORÇAR FALHA DE MÓDULO — deixa o card do módulo crítico E move uma barra manual
+function forceModuleFault(key){
+  const m = state.modules;
+  const F = {
+    solar:    ()=>{ m.solar.eff = 77; m.solar.temp = clamp(m.solar.temp+30,60,125); injectSlider('gen',1.0); },
+    bateria:  ()=>{ injectSlider('battery',9); },
+    suporte:  ()=>{ m.suporte.integ = 88; injectSlider('conBoost',3.5); },
+    comunic:  ()=>{ injectSlider('signal',9); },
+    propulsao:()=>{ m.propulsao.temp = 88; injectSlider('conBoost',2.5); },
+    termico:  ()=>{ injectSlider('cabin',33); },
+  };
+  (F[key] || (()=>{}))();
+  pushAlert('crit','Falha forçada no módulo: ' + (m[key]? m[key].name : key), 'SIMULAÇÃO');
+}
+
+// RESTAURAR CONDIÇÕES NOMINAIS — limpa overrides e volta à linha de base
+function restoreNominal(){
+  const m = state.modules;
+  state.ov = { cabin:null, signal:null, gen:null, battery:null, conBoost:0 };
+  if(boostTimer) clearTimeout(boostTimer);
+  m.termico.cabin = 22; m.termico.load = 45;
+  m.comunic.signal = 90; m.solar.eff = 92; m.solar.temp = 84;
+  m.suporte.integ = 99; m.propulsao.temp = 46;
+  state.battery.chargePct = 80; state.mode = 'NORMAL';
+  document.querySelectorAll('.sl-row.manual').forEach(r=>r.classList.remove('manual'));
+  pushAlert('good','Condições nominais restauradas pelo operador','CONSOLE');
+  pushDecision('Sistema reinicializado para a linha de base','Overrides liberados; operação automática retomada.');
+}
+
+/* ============================================================
+   12. INICIALIZAÇÃO
+   ============================================================ */
+function boot(){
+  initStars();
+  // mensagens iniciais
+  pushAlert('info','Sistema de monitoramento ÓRION-7 inicializado','SISTEMA');
+  pushAlert('good','Todos os módulos respondendo — telemetria nominal','SISTEMA');
+  pushDecision('Calibração automática de sensores concluída','Linha de base estabelecida para todos os módulos.');
+
+  // aquece o histórico p/ o gráfico já iniciar preenchido
+  for(let i=0;i<CFG.histLen;i++) simulate();
+  state.alerts = state.alerts.slice(0,8);   // limpa alertas de aquecimento
+  state.decisions = state.decisions.slice(0,6);
+
+  renderModules(); renderFeeds();
+  wireConsole();                 // [v2] ativa o Console do Operador
+  wireFeeds();                   // [v3] pausa os feeds ao passar o mouse
+  setInterval(logicTick, CFG.tickMs);
+  requestAnimationFrame(frame);
+}
+window.addEventListener('resize', ()=>{ initStars(); });
+boot();
+</script>
+</body>
+</html>
