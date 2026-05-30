@@ -42,8 +42,7 @@ O tema central são **energias renováveis e sustentabilidade**: a fonte princip
 **Localmente:** baixe ou clone o repositório e abra o arquivo `index.html` no navegador.
 
 ```bash
-git clone https://github.com/SEU-USUARIO/orion-7.git
-cd orion-7
+# git clone (https://github.com/vinic8/Global-Solution-2026-Sers.git)
 # abra index.html no navegador
 ```
 
