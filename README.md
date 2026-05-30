@@ -47,7 +47,7 @@ cd orion-7
 # abra index.html no navegador
 ```
 
-**Online:** acesse o link da demonstração ao vivo (GitHub Pages).
+**Online:** acesse o link da demonstração ao vivo.
 
 ##  Estrutura do repositório
 
