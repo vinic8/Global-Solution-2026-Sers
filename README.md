@@ -63,8 +63,9 @@ orion-7/
 
 ## Equipe
 
-- Nome do(a) integrante 1
-- Nome do(a) integrante 2
+- Vinicius Molena
+- Nathan Werner
+- Ricardo Santos
 
 Projeto desenvolvido para o desafio *Soluções em Energias Renováveis e Sustentáveis*.
 
