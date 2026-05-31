@@ -64,8 +64,7 @@ orion-7/
 ## Equipe
 
 - Vinicius Molena
-- Nathan Werner
-- Ricardo Santos
+- Gabriel Vilas
 
 Projeto desenvolvido para o desafio *Soluções em Energias Renováveis e Sustentáveis*.
 
